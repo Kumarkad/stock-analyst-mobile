@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Stock Analyst",
+    "slug": "stock-analyst",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0c"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0c"
+      },
+      "package": "com.kumar.stockanalyst"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "bc27628f-6b34-4fa5-ac1b-e68caa64933c"
+      }
+    },
+    "owner": "mr.tonystark"
+  }
+}
