@@ -10,7 +10,8 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TrendingUp, BarChart2, Shield, Search, ExternalLink, ChevronRight, ArrowUpRight, Trash2, Edit2, LogOut, User, Settings, X, Star, Layout, Briefcase, Globe, Database } from 'lucide-react-native';
 
-const API_URL = 'https://mrtonystark003-stockanalyst.hf.space';
+// Dynamic API URL from Expo environment variables
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://mrtonystark003-stockanalyst.hf.space';
 
 export default function App() {
   const [userPhone, setUserPhone] = useState(null);
