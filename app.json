@@ -34,6 +34,9 @@
         "projectId": "bc27628f-6b34-4fa5-ac1b-e68caa64933c"
       }
     },
-    "owner": "mr.tonystark"
+    "owner": "mr.tonystark",
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
