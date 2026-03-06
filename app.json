@@ -27,7 +27,11 @@
       "package": "com.kumar.stockanalyst"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "name": "Stock Analyst AI",
+      "shortName": "StockAnalyst",
+      "description": "AI-driven equity advisory and prediction engine"
     },
     "extra": {
       "eas": {

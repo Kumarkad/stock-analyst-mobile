@@ -60,6 +60,9 @@ export default function App() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historySymbol, setHistorySymbol] = useState("");
   const [watchlist, setWatchlist] = useState([]);
+  const [researchHistory, setResearchHistory] = useState([]);
+  const [researchPeriod, setResearchPeriod] = useState('1mo'); // 1mo, 3mo, 6mo, 1y
+  const [isResearchHistoryLoading, setIsResearchHistoryLoading] = useState(false);
 
   useEffect(() => {
     console.log('App mounting, starting checkUser...');
@@ -251,14 +254,43 @@ export default function App() {
     setQuery('');
     setIsAnalyzing(true);
     setAnalysis(null);
+    setResearchHistory([]);
     try {
       const response = await fetch(`${API_URL}/analyze?symbol=${symbol}`);
       const data = await response.json();
       setAnalysis(data);
+      // Fetch initial history for 1 month
+      fetchResearchHistory(symbol, '1mo');
     } catch (error) {
       console.error('Analysis error:', error);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const fetchResearchHistory = async (symbol, period) => {
+    setIsResearchHistoryLoading(true);
+    setResearchPeriod(period);
+    try {
+      // Map period for backend if needed, or use directly
+      // Backend expects: 7d, 30d, 1y, etc. 
+      // yfinance expects: 1mo, 3mo, 6mo, 1y
+      const periodMap = {
+        '1mo': '30d',
+        '3mo': '90d',
+        '6mo': '180d',
+        '1y': '1y'
+      };
+      const apiPeriod = periodMap[period] || '30d';
+      const response = await fetch(`${API_URL}/market/history/${symbol}?period=${apiPeriod}`);
+      const data = await response.json();
+      if (data.history) {
+        setResearchHistory(data.history);
+      }
+    } catch (error) {
+      console.error("Error fetching research history:", error);
+    } finally {
+      setIsResearchHistoryLoading(false);
     }
   };
 
@@ -583,7 +615,7 @@ export default function App() {
                 </View>
                 {marketSentiment ? (
                     <View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <View style={[styles.badge, { 
                                 backgroundColor: marketSentiment.label === 'Bullish' ? 'rgba(74, 222, 128, 0.1)' : 
                                                marketSentiment.label === 'Bearish' ? 'rgba(248, 113, 113, 0.1)' : 
@@ -593,7 +625,8 @@ export default function App() {
                                            '#f59e0b',
                                 borderWidth: 1,
                                 paddingHorizontal: 12,
-                                paddingVertical: 4
+                                paddingVertical: 4,
+                                marginTop: 0,
                             }]}>
                                 <Text style={[styles.badgeText, { 
                                     color: marketSentiment.label === 'Bullish' ? '#4ade80' : 
@@ -604,10 +637,13 @@ export default function App() {
                                     {marketSentiment.label.toUpperCase()}
                                 </Text>
                             </View>
-                            <Text style={[styles.gridLabel, { marginLeft: 10, marginBottom: 0 }]}>
-                                {marketSentiment.signals ? marketSentiment.signals.join(' • ') : ''}
-                            </Text>
+                            <View style={{ flex: 1, minWidth: 200 }}>
+                                <Text style={[styles.gridLabel, { color: '#94a3b8', marginBottom: 0 }]} numberOfLines={1}>
+                                    {marketSentiment.signals ? marketSentiment.signals.join(' • ') : ''}
+                                </Text>
+                            </View>
                         </View>
+                        <View style={{ height: 12 }} />
                         
                         <Text style={{ color: '#e2e8f0', fontSize: 14, lineHeight: 20, marginBottom: 15 }}>
                             {marketSentiment.insight}
@@ -806,8 +842,8 @@ export default function App() {
                     }]}>
                       <Text style={[styles.badgeText, { 
                         color: analysis.results.sentiment.label === 'Bullish' ? '#4ade80' : 
-                              analysis.results.sentiment.label === 'Bearish' ? '#f87171' : 
-                              '#94a3b8' 
+                               analysis.results.sentiment.label === 'Bearish' ? '#f87171' : 
+                               '#94a3b8' 
                       }]}>
                         {analysis.results.sentiment.label.toUpperCase()} SENTIMENT
                       </Text>
@@ -819,44 +855,140 @@ export default function App() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Technicals */}
-                <View style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <BarChart2 size={20} color="#3b82f6" />
-                    <Text style={styles.cardTitle}>Technical Summary</Text>
+                {/* Dynamic Period Selector */}
+                <View style={styles.periodSelector}>
+                  {['1mo', '3mo', '6mo', '1y'].map((p) => (
+                    <TouchableOpacity 
+                      key={p} 
+                      style={[styles.periodButton, researchPeriod === p && styles.activePeriodButton]}
+                      onPress={() => fetchResearchHistory(analysis.symbol, p)}
+                    >
+                      <Text style={[styles.periodButtonText, researchPeriod === p && styles.activePeriodButtonText]}>
+                        {p.toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Chart Section */}
+                <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                  {isResearchHistoryLoading ? (
+                    <ActivityIndicator size="large" color="#0ea5e9" style={{ height: 180 }} />
+                  ) : researchHistory && researchHistory.length > 0 ? (
+                    <LineChart
+                      data={{
+                        labels: researchHistory.filter((_, i) => i % (Math.floor(researchHistory.length / 6) || 1) === 0).map(h => h.date.split('-')[2]),
+                        datasets: [{ data: researchHistory.map(h => h.price) }]
+                      }}
+                      width={Dimensions.get('window').width - 40}
+                      height={200}
+                      chartConfig={{
+                        backgroundColor: '#0a0a0c',
+                        backgroundGradientFrom: '#0a0a0c',
+                        backgroundGradientTo: '#121216',
+                        decimalPlaces: 2,
+                        color: (opacity = 1) => `rgba(14, 165, 233, ${opacity})`,
+                        labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                        style: { borderRadius: 16 },
+                        propsForDots: { r: '3', strokeWidth: '1', stroke: '#0ea5e9' }
+                      }}
+                      bezier
+                      style={{ marginVertical: 8, borderRadius: 16 }}
+                    />
+                  ) : (
+                    <View style={[styles.card, { height: 180, justifyContent: 'center', alignItems: 'center', width: '100%' }]}>
+                      <Text style={{ color: '#64748b' }}>No trend data for this period</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Price Stats Section */}
+                <View style={styles.gridRow}>
+                  <View style={styles.gridItem}>
+                    <Text style={styles.gridLabel}>DAY HIGH/LOW</Text>
+                    <Text style={styles.gridValue}>
+                      <Text style={{ color: '#4ade80' }}>{analysis.results.quantitative.technicals.day_high?.toFixed(2)}</Text>
+                      <Text style={{ color: '#64748b' }}> / </Text>
+                      <Text style={{ color: '#f87171' }}>{analysis.results.quantitative.technicals.day_low?.toFixed(2)}</Text>
+                    </Text>
                   </View>
-                  <View style={styles.metricRow}>
-                    <Text style={styles.metricLabel}>Current Price</Text>
-                    <Text style={styles.metricValue}>{getCurrency(analysis.symbol)}{analysis.results.quantitative.technicals.current_price?.toFixed(2)}</Text>
-                  </View>
-                  <View style={styles.metricRow}>
-                    <Text style={styles.metricLabel}>RSI (Momentum)</Text>
-                    <Text style={[styles.metricValue, { color: analysis.results.quantitative.technicals.rsi > 70 ? '#f87171' : '#4ade80' }]}>
-                      {analysis.results.quantitative.technicals.rsi?.toFixed(1)}
+                  <View style={styles.gridItem}>
+                    <Text style={styles.gridLabel}>52W HIGH/LOW</Text>
+                    <Text style={styles.gridValue}>
+                      <Text style={{ color: '#4ade80' }}>{analysis.results.quantitative.fundamentals.fifty_two_week_high?.toFixed(2)}</Text>
+                      <Text style={{ color: '#64748b' }}> / </Text>
+                      <Text style={{ color: '#f87171' }}>{analysis.results.quantitative.fundamentals.fifty_two_week_low?.toFixed(2)}</Text>
                     </Text>
                   </View>
                 </View>
 
-                {/* Fundamentals */}
-                <View style={styles.card}>
+                <View style={[styles.gridRow, { marginTop: 12 }]}>
+                  <View style={styles.gridItem}>
+                    <Text style={styles.gridLabel}>VOLUME</Text>
+                    <Text style={styles.gridValue}>{(analysis.results.quantitative.technicals.volume / 1000000).toFixed(2)}M</Text>
+                  </View>
+                  <View style={styles.gridItem}>
+                    <Text style={styles.gridLabel}>AVG P/E</Text>
+                    <Text style={styles.gridValue}>{analysis.results.quantitative.fundamentals.pe_ratio?.toFixed(1) || 'N/A'}</Text>
+                  </View>
+                </View>
+
+                {/* Fundamental Efficiency */}
+                <View style={[styles.card, { marginTop: 20 }]}>
                   <View style={styles.cardHeader}>
                     <Shield size={20} color="#10b981" />
-                    <Text style={styles.cardTitle}>Efficiency & Valuation</Text>
+                    <Text style={styles.cardTitle}>Fundamental Health</Text>
                   </View>
                   <View style={styles.gridRow}>
-                    <View style={styles.gridItem}>
-                      <Text style={styles.gridLabel}>P/E RATIO</Text>
-                      <Text style={styles.gridValue}>{analysis.results.quantitative.fundamentals.pe_ratio?.toFixed(1) || 'N/A'}</Text>
-                    </View>
-                    <View style={styles.gridItem}>
-                      <Text style={styles.gridLabel}>RETURN ON EQUITY</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gridLabel}>ROE</Text>
                       <Text style={styles.gridValue}>{(analysis.results.quantitative.fundamentals.roe * 100)?.toFixed(1)}%</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gridLabel}>ROA</Text>
+                      <Text style={styles.gridValue}>{(analysis.results.quantitative.fundamentals.roa * 100)?.toFixed(1)}%</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.gridRow, { marginTop: 15 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gridLabel}>DIV YIELD</Text>
+                      <Text style={styles.gridValue}>{(analysis.results.quantitative.fundamentals.dividend_yield * 100)?.toFixed(1)}%</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.gridLabel}>PEG RATIO</Text>
+                      <Text style={styles.gridValue}>{analysis.results.quantitative.fundamentals.peg_ratio?.toFixed(2) || 'N/A'}</Text>
                     </View>
                   </View>
                 </View>
 
-                {/* News */}
-                <Text style={styles.sectionTitle}>Agent Pulse: Top Narratives</Text>
+                {/* Performance Context */}
+                <View style={styles.perfCard}>
+                  <View style={styles.cardHeader}>
+                    <BarChart2 size={20} color="#3b82f6" />
+                    <Text style={styles.cardTitle}>Performance vs Bench ({analysis.benchmark.symbol})</Text>
+                  </View>
+                  
+                  {[
+                    { label: '1 Day Return', stock: 'day' },
+                    { label: '1 Month Return', stock: 'month' },
+                    { label: '1 Year Return', stock: 'year' }
+                  ].map((item, idx) => (
+                    <View key={idx} style={styles.perfRow}>
+                      <Text style={styles.metricLabel}>{item.label}</Text>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ color: (analysis.performance[item.stock] || 0) >= 0 ? '#4ade80' : '#f87171', fontWeight: '800' }}>
+                          {(analysis.performance[item.stock] || 0).toFixed(2)}%
+                        </Text>
+                        <Text style={{ color: '#64748b', fontSize: 10 }}>
+                          Bench: {(analysis.benchmark.performance[item.stock] || 0).toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {/* News Headlines */}
+                <Text style={[styles.sectionTitle, { marginTop: 10 }]}>Agent Pulse: Top Narratives</Text>
                 {analysis.results.sentiment.top_headlines && analysis.results.sentiment.top_headlines.slice(0, 3).map((news, idx) => (
                   <TouchableOpacity 
                     key={idx} 
@@ -993,7 +1125,14 @@ export default function App() {
               keyboardType="numeric"
             />
 
-            <Text style={styles.gridLabel}>TOTP SECRET (RECOMMENDED)</Text>
+            <View style={{ backgroundColor: 'rgba(14, 165, 233, 0.05)', padding: 15, borderRadius: 16, marginBottom: 15, borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.1)' }}>
+              <Text style={[styles.gridLabel, { color: '#0ea5e9' }]}>AUTOMATION SETUP</Text>
+              <Text style={[styles.helperText, { marginTop: 5, color: '#e2e8f0' }]}>
+                To sync without entering a code every time, provide your TOTP Secret Key from Angel One's security settings.
+              </Text>
+            </View>
+
+            <Text style={styles.gridLabel}>TOTP SECRET (ONE-TIME SETUP)</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="Your 32-character Secret"
@@ -1004,16 +1143,20 @@ export default function App() {
               autoCorrect={false}
             />
 
-            <Text style={[styles.gridLabel, { marginTop: 5 }]}>OR: 6-DIGIT TOTP CODE</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. 123456"
-              placeholderTextColor="#475569"
-              value={angelCreds.totp_code}
-              onChangeText={(t) => setAngelCreds({...angelCreds, totp_code: t})}
-              keyboardType="numeric"
-              maxLength={6}
-            />
+            {!angelCreds.totp_secret && (
+              <>
+                <Text style={[styles.gridLabel, { marginTop: 10 }]}>OR: ENTER 6-DIGIT CODE</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. 123456"
+                  placeholderTextColor="#475569"
+                  value={angelCreds.totp_code}
+                  onChangeText={(t) => setAngelCreds({...angelCreds, totp_code: t})}
+                  keyboardType="numeric"
+                  maxLength={6}
+                />
+              </>
+            )}
 
             <TouchableOpacity 
               style={[styles.authButton, { marginTop: 10 }]}
@@ -1027,9 +1170,11 @@ export default function App() {
               )}
             </TouchableOpacity>
             
-            <Text style={styles.helperText}>
-              Enable 2FA on Angel One to get your TOTP Secret. We'll use it to automate your login sync.
-            </Text>
+            <TouchableOpacity onPress={() => Linking.openURL('https://smartapi.angelbroking.com/enable-totp')}>
+              <Text style={[styles.helperText, { color: '#0ea5e9', textDecorationLine: 'underline', marginTop: 15 }]}>
+                How to get TOTP Secret? (Angel One Portal)
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -1711,5 +1856,44 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 2,
     textTransform: 'uppercase',
+  },
+  periodSelector: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginVertical: 15,
+  },
+  periodButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  activePeriodButton: {
+    backgroundColor: '#0ea5e9',
+  },
+  periodButtonText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '700',
+  },
+  activePeriodButtonText: {
+    color: '#000',
+  },
+  perfCard: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 15,
+  },
+  perfRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
 });
