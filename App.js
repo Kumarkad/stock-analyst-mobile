@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TextInput,
   TouchableOpacity, ScrollView, ActivityIndicator,
-  Linking, Platform, StatusBar as RNStatusBar, Alert, Modal, Dimensions
+  Linking, Platform, StatusBar as RNStatusBar, Alert, Modal, Dimensions, KeyboardAvoidingView
 } from 'react-native';
 import LineChart from 'react-native-chart-kit/dist/line-chart/LineChart';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +13,27 @@ import { TrendingUp, BarChart2, Shield, Search, ExternalLink, ChevronRight, Arro
 // Dynamic API URL from Expo environment variables
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://mrtonystark003-stockanalyst.hf.space';
 
+const SYMBOL_NAMES = {
+  'GC=F': 'Gold Futures',
+  'SI=F': 'Silver Futures',
+  '^NSEI': 'Nifty 50',
+  '^BSESN': 'BSE Sensex',
+  '^GSPC': 'S&P 500',
+  '^IXIC': 'Nasdaq Composite',
+  '^DJI': 'Dow Jones',
+  'BTC-USD': 'Bitcoin',
+  'ETH-USD': 'Ethereum'
+};
+
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppContent />
+    </SafeAreaProvider>
+  );
+}
+
+function AppContent() {
   const [userPhone, setUserPhone] = useState(null);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -63,6 +83,14 @@ export default function App() {
   const [researchHistory, setResearchHistory] = useState([]);
   const [researchPeriod, setResearchPeriod] = useState('1mo'); // 1mo, 3mo, 6mo, 1y
   const [isResearchHistoryLoading, setIsResearchHistoryLoading] = useState(false);
+  
+  // Profile & Theme States
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(true); // Default to dark
+  const [selectedPoint, setSelectedPoint] = useState(null);
+  const [selectedResearchPoint, setSelectedResearchPoint] = useState(null);
 
   useEffect(() => {
     console.log('App mounting, starting checkUser...');
@@ -107,11 +135,46 @@ export default function App() {
       console.log('Found savedPhone:', savedPhone);
       if (savedPhone) {
         setUserPhone(savedPhone);
+        fetchUserProfile(savedPhone);
       }
     } catch (e) {
       console.warn('AsyncStorage error:', e.message);
     } finally {
       setIsAppReady(true);
+    }
+  };
+
+  const fetchUserProfile = async (phone) => {
+    try {
+      const resp = await fetch(`${API_URL}/auth/profile?phone_number=${phone}`);
+      const data = await resp.json();
+      if (data.status === 'success') {
+        setName(data.profile.name || '');
+        setEmail(data.profile.email || '');
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    setIsAnalyzing(true);
+    try {
+      const resp = await fetch(`${API_URL}/auth/profile?phone_number=${userPhone}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email })
+      });
+      const data = await resp.json();
+      if (data.status === 'success') {
+        Alert.alert("Success", "Profile updated successfully");
+        setShowEditProfile(false);
+      }
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      Alert.alert("Error", "Could not update profile");
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -255,6 +318,7 @@ export default function App() {
     setIsAnalyzing(true);
     setAnalysis(null);
     setResearchHistory([]);
+    setSelectedResearchPoint(null);
     try {
       const response = await fetch(`${API_URL}/analyze?symbol=${symbol}`);
       const data = await response.json();
@@ -338,6 +402,7 @@ export default function App() {
   const fetchHistory = async (symbol) => {
     setIsHistoryLoading(true);
     setHistorySymbol(symbol);
+    setSelectedPoint(null);
     setShowHistoryModal(true);
     try {
       const response = await fetch(`${API_URL}/market/history/${symbol}?period=30d`);
@@ -363,6 +428,18 @@ export default function App() {
       console.error('Error fetching market sentiment:', error);
     }
   };
+
+  const renderPlaceholderTiles = () => (
+    <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
+      {[1, 2, 3, 4].map((i) => (
+        <View key={i} style={[styles.gridItem, { minWidth: '45%', backgroundColor: 'rgba(255,255,255,0.02)', opacity: 0.5 }]}>
+          <View style={{ width: 80, height: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 4, marginBottom: 8 }} />
+          <View style={{ width: 60, height: 20, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 4, marginBottom: 6 }} />
+          <View style={{ width: 100, height: 10, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 4 }} />
+        </View>
+      ))}
+    </View>
+  );
 
   const updateHolding = async () => {
     try {
@@ -433,8 +510,7 @@ export default function App() {
 
   if (!userPhone) {
     return (
-      <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container}>
           <View style={{ flex: 1, justifyContent: 'center', padding: 30 }}>
             <View style={styles.logo}>
               <TrendingUp size={32} color="#fff" />
@@ -485,15 +561,13 @@ export default function App() {
               </Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
-      </SafeAreaProvider>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="light" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="light" />
       
       {/* Header */}
       <View style={styles.header}>
@@ -504,14 +578,13 @@ export default function App() {
           <Text style={styles.logoText}>StockAnalyst<Text style={styles.accent}>.ai</Text></Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
-          {/* Portfolio button removed from here, now in tabs */}
           <TouchableOpacity onPress={() => setShowProfileModal(true)}>
             <User size={20} color="#94a3b8" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {/* Indices View - Now focused on market overview only */}
         {activeTab === 'indices' && (
           <View style={styles.resultsContainer}>
@@ -520,95 +593,8 @@ export default function App() {
               {isMarketLoading && <ActivityIndicator size="small" color="#0ea5e9" />}
             </View>
             
-            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 5 }]}>Indian Indices</Text>
-            <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
-              {marketData.indian.map((item) => (
-                <TouchableOpacity 
-                  key={item.symbol} 
-                  style={[styles.gridItem, { minWidth: '45%', backgroundColor: item.percent_change >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)' }]}
-                  onPress={() => fetchHistory(item.symbol)}
-                >
-                  <Text style={styles.gridLabel}>{item.name}</Text>
-                  <Text style={[styles.gridValue, { color: item.percent_change >= 0 ? '#4ade80' : '#f87171' }]}>{item.price.toLocaleString()}</Text>
-                  <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
-                    {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Global Indices</Text>
-            <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
-              {marketData.global.map((item) => (
-                <TouchableOpacity 
-                  key={item.symbol} 
-                  style={[styles.gridItem, { minWidth: '45%' }]}
-                  onPress={() => fetchHistory(item.symbol)}
-                >
-                  <Text style={styles.gridLabel}>{item.name}</Text>
-                  <Text style={[styles.gridValue, { color: item.percent_change >= 0 ? '#4ade80' : '#f87171' }]}>{item.price.toLocaleString()}</Text>
-                  <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
-                    {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Commodities</Text>
-            <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
-              {marketData.commodities.map((item) => (
-                <TouchableOpacity 
-                  key={item.symbol} 
-                  style={[styles.gridItem, { minWidth: '45%' }]}
-                  onPress={() => fetchHistory(item.symbol)}
-                >
-                  <Text style={styles.gridLabel}>{item.name}</Text>
-                  <Text style={[styles.gridValue, { color: '#fbbf24' }]}>
-                    {item.currency}{item.price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                  </Text>
-                  <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
-                    {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Forex Rates (to ₹)</Text>
-            <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
-              {marketData.forex.map((item) => (
-                <TouchableOpacity 
-                  key={item.symbol} 
-                  style={[styles.gridItem, { minWidth: '45%' }]}
-                  onPress={() => fetchHistory(item.symbol)}
-                >
-                  <Text style={styles.gridLabel}>{item.name}</Text>
-                  <Text style={[styles.gridValue, { color: '#818cf8' }]}>₹{item.price.toFixed(2)}</Text>
-                  <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
-                    {item.change >= 0 ? '+' : ''}{item.change.toFixed(4)} ({item.percent_change.toFixed(2)}%)
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Cryptocurrencies</Text>
-            <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
-              {marketData.crypto.map((item) => (
-                <TouchableOpacity 
-                  key={item.symbol} 
-                  style={[styles.gridItem, { minWidth: '45%' }]}
-                  onPress={() => fetchHistory(item.symbol)}
-                >
-                  <Text style={styles.gridLabel}>{item.name}</Text>
-                  <Text style={[styles.gridValue, { color: '#f59e0b' }]}>${item.price.toLocaleString()}</Text>
-                  <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
-                    {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* AI Market Sentiment Card */}
-            <View style={[styles.card, { marginTop: 25, borderLeftColor: '#0ea5e9', borderLeftWidth: 4 }]}>
+            {/* AI Market Sentiment Card - Now at the Top */}
+            <View style={[styles.card, { marginTop: 10, borderLeftColor: '#0ea5e9', borderLeftWidth: 4 }]}>
                 <View style={[styles.cardHeader, { marginBottom: 10 }]}>
                     <TrendingUp size={18} color="#0ea5e9" />
                     <Text style={styles.cardTitle}>AI Market Pulse</Text>
@@ -664,17 +650,111 @@ export default function App() {
                     <ActivityIndicator color="#0ea5e9" size="small" style={{ alignSelf: 'flex-start', marginTop: 5 }} />
                 )}
             </View>
+            
+            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 5 }]}>Indian Indices</Text>
+            {isMarketLoading && marketData.indian.length === 0 ? renderPlaceholderTiles() : (
+              <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
+                {marketData.indian.map((item) => (
+                  <TouchableOpacity 
+                    key={item.symbol} 
+                    style={[styles.gridItem, { width: '48%', backgroundColor: item.percent_change >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)' }]}
+                    onPress={() => fetchHistory(item.symbol)}
+                  >
+                    <Text style={styles.gridLabel}>{item.name}</Text>
+                    <Text style={[styles.gridValue, { color: item.percent_change >= 0 ? '#4ade80' : '#f87171' }]}>{item.price.toLocaleString()}</Text>
+                    <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
+                      {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Global Indices</Text>
+            {isMarketLoading && marketData.global.length === 0 ? renderPlaceholderTiles() : (
+              <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
+                {marketData.global.map((item) => (
+                  <TouchableOpacity 
+                    key={item.symbol} 
+                    style={[styles.gridItem, { width: '48%' }]}
+                    onPress={() => fetchHistory(item.symbol)}
+                  >
+                    <Text style={styles.gridLabel}>{item.name}</Text>
+                    <Text style={[styles.gridValue, { color: item.percent_change >= 0 ? '#4ade80' : '#f87171' }]}>{item.price.toLocaleString()}</Text>
+                    <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
+                      {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Commodities</Text>
+            {isMarketLoading && marketData.commodities.length === 0 ? renderPlaceholderTiles() : (
+              <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
+                {marketData.commodities.map((item) => (
+                  <TouchableOpacity 
+                    key={item.symbol} 
+                    style={[styles.gridItem, { width: '48%' }]}
+                    onPress={() => fetchHistory(item.symbol)}
+                  >
+                    <Text style={styles.gridLabel}>{item.name}</Text>
+                    <Text style={[styles.gridValue, { color: '#fbbf24' }]}>
+                      {item.currency}{item.price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                    </Text>
+                    <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
+                      {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Forex Rates (to ₹)</Text>
+            {isMarketLoading && marketData.forex.length === 0 ? renderPlaceholderTiles() : (
+              <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
+                {marketData.forex.map((item) => (
+                  <TouchableOpacity 
+                    key={item.symbol} 
+                    style={[styles.gridItem, { width: '48%' }]}
+                    onPress={() => fetchHistory(item.symbol)}
+                  >
+                    <Text style={styles.gridLabel}>{item.name}</Text>
+                    <Text style={[styles.gridValue, { color: '#818cf8' }]}>₹{item.price.toFixed(2)}</Text>
+                    <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
+                      {item.change >= 0 ? '+' : ''}{item.change.toFixed(4)} ({item.percent_change.toFixed(2)}%)
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={[styles.sectionTitle, { fontSize: 14, marginTop: 25 }]}>Cryptocurrencies</Text>
+            {isMarketLoading && marketData.crypto.length === 0 ? renderPlaceholderTiles() : (
+              <View style={[styles.gridRow, { flexWrap: 'wrap' }]}>
+                {marketData.crypto.map((item) => (
+                  <TouchableOpacity 
+                    key={item.symbol} 
+                    style={[styles.gridItem, { width: '48%' }]}
+                    onPress={() => fetchHistory(item.symbol)}
+                  >
+                    <Text style={styles.gridLabel}>{item.name}</Text>
+                    <Text style={[styles.gridValue, { color: '#f59e0b' }]}>${item.price.toLocaleString()}</Text>
+                    <Text style={{ color: item.percent_change >= 0 ? '#4ade80' : '#f87171', fontSize: 10 }}>
+                      {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.percent_change.toFixed(2)}%)
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
         {/* Portfolio View */}
         {activeTab === 'portfolio' && (
           <View style={styles.resultsContainer}>
-            <View style={styles.resultHeader}>
+            <View style={[styles.resultHeader, { marginBottom: 20 }]}>
               <Text style={styles.resultSymbol}>Portfolio</Text>
-              <TouchableOpacity onPress={() => setActiveTab('indices')} style={styles.convictionBox}>
-                <Text style={styles.convictionValue}>Home</Text>
-              </TouchableOpacity>
             </View>
 
             {portfolioData.length === 0 ? (
@@ -875,26 +955,37 @@ export default function App() {
                   {isResearchHistoryLoading ? (
                     <ActivityIndicator size="large" color="#0ea5e9" style={{ height: 180 }} />
                   ) : researchHistory && researchHistory.length > 0 ? (
-                    <LineChart
-                      data={{
-                        labels: researchHistory.filter((_, i) => i % (Math.floor(researchHistory.length / 6) || 1) === 0).map(h => h.date.split('-')[2]),
-                        datasets: [{ data: researchHistory.map(h => h.price) }]
-                      }}
-                      width={Dimensions.get('window').width - 40}
-                      height={200}
-                      chartConfig={{
-                        backgroundColor: '#0a0a0c',
-                        backgroundGradientFrom: '#0a0a0c',
-                        backgroundGradientTo: '#121216',
-                        decimalPlaces: 2,
-                        color: (opacity = 1) => `rgba(14, 165, 233, ${opacity})`,
-                        labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
-                        style: { borderRadius: 16 },
-                        propsForDots: { r: '3', strokeWidth: '1', stroke: '#0ea5e9' }
-                      }}
-                      bezier
-                      style={{ marginVertical: 8, borderRadius: 16 }}
-                    />
+                    <View style={{ width: '100%', alignItems: 'center' }}>
+                      {selectedResearchPoint && (
+                        <View style={{ backgroundColor: 'rgba(14, 165, 233, 0.15)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)', width: '90%' }}>
+                          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800', textAlign: 'center' }}>
+                            Price: <Text style={{ color: '#0ea5e9' }}>{selectedResearchPoint.value.toLocaleString()}</Text> • {researchHistory[selectedResearchPoint.index]?.date}
+                          </Text>
+                        </View>
+                      )}
+                      <LineChart
+                        data={{
+                          labels: researchHistory.filter((_, i) => i % (Math.floor(researchHistory.length / 6) || 1) === 0).map(h => h.date.split('-')[2]),
+                          datasets: [{ data: researchHistory.map(h => h.price) }]
+                        }}
+                        width={Dimensions.get('window').width - 40}
+                        height={220}
+                        chartConfig={{
+                          backgroundColor: '#0a0a0c',
+                          backgroundGradientFrom: '#0a0a0c',
+                          backgroundGradientTo: '#121216',
+                          decimalPlaces: 2,
+                          color: (opacity = 1) => `rgba(14, 165, 233, ${opacity})`,
+                          labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+                          style: { borderRadius: 16 },
+                          propsForDots: { r: '5', strokeWidth: '2', stroke: '#0ea5e9' }
+                        }}
+                        bezier
+                        onDataPointClick={(data) => setSelectedResearchPoint(data)}
+                        style={{ marginVertical: 8, borderRadius: 16 }}
+                      />
+                      <Text style={[styles.gridLabel, { marginTop: 5, fontSize: 11, opacity: 0.8 }]}>Tap data points for precise price analysis</Text>
+                    </View>
                   ) : (
                     <View style={[styles.card, { height: 180, justifyContent: 'center', alignItems: 'center', width: '100%' }]}>
                       <Text style={{ color: '#64748b' }}>No trend data for this period</Text>
@@ -965,7 +1056,7 @@ export default function App() {
                 <View style={styles.perfCard}>
                   <View style={styles.cardHeader}>
                     <BarChart2 size={20} color="#3b82f6" />
-                    <Text style={styles.cardTitle}>Performance vs Bench ({analysis.benchmark.symbol})</Text>
+                    <Text style={styles.cardTitle}>Performance vs Bench ({analysis.results.quantitative.benchmark.symbol})</Text>
                   </View>
                   
                   {[
@@ -976,11 +1067,11 @@ export default function App() {
                     <View key={idx} style={styles.perfRow}>
                       <Text style={styles.metricLabel}>{item.label}</Text>
                       <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ color: (analysis.performance[item.stock] || 0) >= 0 ? '#4ade80' : '#f87171', fontWeight: '800' }}>
-                          {(analysis.performance[item.stock] || 0).toFixed(2)}%
+                        <Text style={{ color: (analysis.results.quantitative.performance[item.stock] || 0) >= 0 ? '#4ade80' : '#f87171', fontWeight: '800' }}>
+                          {(analysis.results.quantitative.performance[item.stock] || 0).toFixed(2)}%
                         </Text>
                         <Text style={{ color: '#64748b', fontSize: 10 }}>
-                          Bench: {(analysis.benchmark.performance[item.stock] || 0).toFixed(2)}%
+                          Bench: {(analysis.results.quantitative.benchmark.performance[item.stock] || 0).toFixed(2)}%
                         </Text>
                       </View>
                     </View>
@@ -1092,6 +1183,73 @@ export default function App() {
           </View>
         </View>
       )}
+
+      {/* Edit Profile Modal */}
+      <Modal visible={showEditProfile} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={[styles.modalContent, { maxHeight: '90%' }]}
+          >
+            <View style={[styles.modalHeader, { paddingHorizontal: 10, paddingBottom: 10 }]}>
+              <Text style={[styles.modalTitle, { fontSize: 24, marginBottom: 0 }]}>Edit Profile</Text>
+              <TouchableOpacity onPress={() => setShowEditProfile(false)} style={{ padding: 5 }}>
+                <X size={26} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ padding: 25, paddingTop: 10 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={{ marginBottom: 30 }}>
+                <Text style={[styles.gridLabel, { fontSize: 13, letterSpacing: 1, marginBottom: 10 }]}>FULL NAME</Text>
+                <TextInput
+                  style={[styles.input, { height: 64, fontSize: 18, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, paddingHorizontal: 20, color: '#fff', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }]}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your name"
+                  placeholderTextColor="#64748b"
+                />
+              </View>
+
+              <View style={{ marginBottom: 30 }}>
+                <Text style={[styles.gridLabel, { fontSize: 13, letterSpacing: 1, marginBottom: 10 }]}>EMAIL ADDRESS</Text>
+                <TextInput
+                  style={[styles.input, { height: 64, fontSize: 18, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, paddingHorizontal: 20, color: '#fff', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }]}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
+                  placeholderTextColor="#64748b"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={{ marginBottom: 40 }}>
+                <Text style={[styles.gridLabel, { fontSize: 13, letterSpacing: 1, marginBottom: 10 }]}>PHONE NUMBER (Linked)</Text>
+                <View style={{ height: 64, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, paddingHorizontal: 20, justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
+                  <Text style={{ color: '#94a3b8', fontSize: 18, fontWeight: '600' }}>{userPhone}</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.primaryButton, { height: 60, borderRadius: 18, backgroundColor: '#0ea5e9', justifyContent: 'center', alignItems: 'center', shadowColor: '#0ea5e9', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }, isAnalyzing && { opacity: 0.7 }]} 
+                onPress={handleUpdateProfile}
+                disabled={isAnalyzing}
+              >
+                {isAnalyzing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={[styles.primaryButtonText, { fontSize: 18, fontWeight: '800' }]}>Save Profile</Text>
+                )}
+              </TouchableOpacity>
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
       {/* Angel One Login Modal */}
       {showAngelLogin && (
@@ -1256,10 +1414,21 @@ export default function App() {
             <View style={{ marginTop: 10 }}>
               <TouchableOpacity 
                 style={styles.brokerItem} 
+                onPress={() => { setShowProfileModal(false); setShowEditProfile(true); }}
+              >
+                <User size={20} color="#0ea5e9" />
+                <View style={{ marginLeft: 15, flex: 1 }}>
+                  <Text style={styles.brokerName}>Account Details</Text>
+                  <Text style={styles.brokerDesc}>Edit your name, email and phone</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.brokerItem} 
                 onPress={() => { setShowProfileModal(false); setShowBrokerModal(true); }}
               >
-                <Shield size={20} color="#0ea5e9" />
-                <View style={{ marginLeft: 15 }}>
+                <Shield size={20} color="#8b5cf6" />
+                <View style={{ marginLeft: 15, flex: 1 }}>
                   <Text style={styles.brokerName}>Broker Integrations</Text>
                   <Text style={styles.brokerDesc}>Sync your multi-broker accounts</Text>
                 </View>
@@ -1270,9 +1439,9 @@ export default function App() {
                 onPress={() => { setShowProfileModal(false); setShowSettings(true); }}
               >
                 <Settings size={20} color="#94a3b8" />
-                <View style={{ marginLeft: 15 }}>
+                <View style={{ marginLeft: 15, flex: 1 }}>
                   <Text style={styles.brokerName}>Settings</Text>
-                  <Text style={styles.brokerDesc}>Preferences, Dark Mode, Alerts</Text>
+                  <Text style={styles.brokerDesc}>Preferences, Theme, Alerts</Text>
                 </View>
               </TouchableOpacity>
 
@@ -1281,7 +1450,7 @@ export default function App() {
                 onPress={() => { setShowProfileModal(false); handleLogout(); }}
               >
                 <LogOut size={20} color="#ef4444" />
-                <View style={{ marginLeft: 15 }}>
+                <View style={{ marginLeft: 15, flex: 1 }}>
                   <Text style={[styles.brokerName, { color: '#ef4444' }]}>Logout</Text>
                   <Text style={styles.brokerDesc}>Sign out of your session</Text>
                 </View>
@@ -1306,6 +1475,18 @@ export default function App() {
               <Text style={styles.cardTitle}>v1.0.4 (Experimental)</Text>
             </View>
             <View style={styles.card}>
+              <Text style={styles.gridLabel}>APPEARANCE</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 }}>
+                <Text style={styles.cardTitle}>{isDarkMode ? 'Dark' : 'Light'} Mode</Text>
+                <TouchableOpacity 
+                  onPress={() => setIsDarkMode(!isDarkMode)}
+                  style={[styles.miniButton, { backgroundColor: isDarkMode ? '#1e293b' : '#e2e8f0' }]}
+                >
+                  <Text style={{ color: isDarkMode ? '#fff' : '#000', fontWeight: 'bold' }}>Switch</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.card}>
               <Text style={styles.gridLabel}>NOTIFICATIONS</Text>
               <Text style={styles.cardTitle}>Price Alerts (Enabled)</Text>
             </View>
@@ -1328,7 +1509,7 @@ export default function App() {
             <View style={[styles.modalContent, { height: '60%', width: '95%', backgroundColor: '#111827' }]}>
               <View style={styles.modalHeader}>
                 <View>
-                  <Text style={styles.modalTitle}>{historySymbol}</Text>
+                  <Text style={styles.modalTitle}>{SYMBOL_NAMES[historySymbol] || historySymbol}</Text>
                   <Text style={styles.gridLabel}>30-DAY PRICE TREND</Text>
                 </View>
                 <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
@@ -1343,6 +1524,13 @@ export default function App() {
               ) : selectedHistory && selectedHistory.length > 0 ? (
                 <ScrollView showsVerticalScrollIndicator={false}>
                   <View style={{ marginTop: 20, alignItems: 'center' }}>
+                    {selectedPoint && (
+                      <View style={{ backgroundColor: 'rgba(14, 165, 233, 0.1)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(14, 165, 233, 0.3)' }}>
+                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
+                          Price: <Text style={{ color: '#0ea5e9' }}>{selectedPoint.value.toLocaleString()}</Text> • {selectedHistory[selectedPoint.index]?.date}
+                        </Text>
+                      </View>
+                    )}
                     <LineChart
                       data={{
                         labels: selectedHistory.filter((_, i) => i % 6 === 0).map(h => h.date.split('-')[2]),
@@ -1358,11 +1546,15 @@ export default function App() {
                         color: (opacity = 1) => `rgba(14, 165, 233, ${opacity})`,
                         labelColor: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
                         style: { borderRadius: 16 },
-                        propsForDots: { r: '3', strokeWidth: '1', stroke: '#0ea5e9' }
+                        propsForDots: { r: '4', strokeWidth: '2', stroke: '#0ea5e9' }
                       }}
                       bezier
+                      onDataPointClick={(data) => {
+                        setSelectedPoint(data);
+                      }}
                       style={{ marginVertical: 8, borderRadius: 16 }}
                     />
+                    <Text style={[styles.gridLabel, { marginTop: 5, fontSize: 10, opacity: 0.7 }]}>Tap dots to see exact price</Text>
                   </View>
 
                   {(() => {
@@ -1432,7 +1624,6 @@ export default function App() {
       )}
 
       </SafeAreaView>
-    </SafeAreaProvider>
   );
 }
 
@@ -1633,19 +1824,26 @@ const styles = StyleSheet.create({
   },
   gridRow: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingBottom: 5,
   },
   gridItem: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    padding: 15,
-    borderRadius: 16,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    width: '48%',
+    marginBottom: 12,
   },
   gridLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#64748b',
     fontWeight: '800',
     marginBottom: 5,
+    letterSpacing: 0.5,
   },
   gridValue: {
     fontSize: 16,
@@ -1656,8 +1854,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '800',
-    marginTop: 15,
+    marginTop: 35,
     marginBottom: 15,
+    width: '100%',
+    paddingHorizontal: 5,
   },
   newsItem: {
     backgroundColor: 'rgba(255,255,255,0.03)',
@@ -1760,16 +1960,16 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   modalContent: {
-    width: '85%',
+    width: '92%',
     backgroundColor: '#121216',
-    borderRadius: 24,
+    borderRadius: 32,
     padding: 25,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
     color: '#fff',
     marginBottom: 20,
   },
@@ -1837,25 +2037,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   brokerName: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: '#fff',
   },
   brokerDesc: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#94a3b8',
-    marginTop: 2,
+    marginTop: 4,
   },
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#64748b',
-    fontWeight: '800',
-    marginBottom: 2,
+    fontWeight: '900',
+    marginBottom: 4,
     textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   periodSelector: {
     flexDirection: 'row',
@@ -1895,5 +2096,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  miniButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

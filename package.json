@@ -9,20 +9,20 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~4.0.1",
-    "@react-native-async-storage/async-storage": "1.23.1",
-    "expo": "~52.0.0",
-    "expo-asset": "~11.0.5",
-    "expo-status-bar": "~2.0.0",
+    "@expo/metro-runtime": "~6.1.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~54.0.0",
+    "expo-asset": "~12.0.12",
+    "expo-status-bar": "~3.0.9",
     "lucide-react-native": "^0.460.0",
     "paths-js": "^0.4.11",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-native": "0.76.9",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-chart-kit": "^6.12.0",
-    "react-native-safe-area-context": "4.12.0",
-    "react-native-svg": "15.8.0",
-    "react-native-web": "~0.19.13"
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-svg": "15.12.1",
+    "react-native-web": "^0.21.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2"
